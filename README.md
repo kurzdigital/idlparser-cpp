@@ -9,6 +9,9 @@ This is a C++-only alternative to [idlparser-c][cimp], which uses
 ## Barcode
 
 IDLs are usually encoded in a [PDF417][pdf417] barcode.
+
+![AAMVA sample](samples/05.png)
+
 Reading this barcode is not part of this library.
 
 ## How to use
