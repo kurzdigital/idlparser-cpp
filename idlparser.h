@@ -42,28 +42,28 @@ static void idl_resolve_sex(std::string &value) {
 	}
 }
 
-static const char *idl_subtype(const char *s, unsigned int left,
+static int idl_is_subtype(const char *s) {
+	return !strncmp(s, "DL", 2) || !strncmp(s, "ID", 2);
+}
+
+static const char *idl_subtype(const char *s, const char *end,
 		char (*code)[3]) {
-	for (const char *p = s; left > 0; --left, ++p) {
+	for (const char *p = s; p < end; ++p) {
 		if (!strchr(IDL_DIGITS, *p)) {
 			continue;
 		}
 		const char *d = p;
-		for (; left > 0 && strchr(IDL_DIGITS, *d); --left, ++d);
+		for (; d < end && strchr(IDL_DIGITS, *d); ++d);
 		// Check if there are 8 or more consecutive digits.
-		if (d - p < 8 || left < 3 ||
-				// Check if this is followed by "DL" or "ID".
-				(strncmp(d, "DL", 2) && strncmp(d, "ID", 2))) {
+		if (d - p < 8 || end - d < 3 || !idl_is_subtype(d)) {
 			continue;
 		}
 		strncpy(*code, d, 2);
 		d += 2;
-		while (left > 2) {
+		while (end - d > 2) {
 			// Skip over everything that is not a "D" or "I".
-			for (; left > 0 && !strchr("DI", *d); --left, ++d);
-			if (left > 2 &&
-					// Check if it is a "DL" or "ID".
-					(!strncmp(d, "DL", 2) || !strncmp(d, "ID", 2))) {
+			for (; d < end && !strchr("DI", *d); ++d);
+			if (end - d > 2 && idl_is_subtype(d)) {
 				// Return pointer after second "DL|ID".
 				return d + 2;
 			}
@@ -80,7 +80,7 @@ static std::string idl_find_iin(const std::string &s, unsigned int *size) {
 	pos += 4;
 	pos = s.find_first_not_of(IDL_WHITE_SPACE, pos);
 	if (pos == std::string::npos) {
-		return ""; // There need to be some white space after ANSI.
+		return ""; // There needs to be some white space after ANSI.
 	}
 	// The IIN is at most 6 digits long.
 	size_t len = s.size();
@@ -107,23 +107,24 @@ IDL parse_idl(const std::string &s) {
 	}
 
 	// Check for sub file pattern.
-	const char *p = s.c_str();
-	{
-		int left = s.size();
-		for (; left > 0 && strchr(IDL_WHITE_SPACE, *p); --left, ++p);
-		if (*p == '@') {
-			char code[] = {0,0,0};
-			p = idl_subtype(p, left, &code);
-			if (*code) {
-				idl_add(&idl, "DL", code);
-			}
+	const char *end = s.c_str() + s.size();
+	size_t pos = s.find_first_not_of(IDL_WHITE_SPACE);
+	const char *p = s.c_str() + (pos == std::string::npos ? 0 : pos);
+	if (*p == '@') {
+		char code[] = {0,0,0};
+		p = idl_subtype(p, end, &code);
+		if (*code) {
+			idl_add(&idl, "DL", code);
 		}
 	}
 
 	// Split and collect key/value pairs.
-	const char *start = p;
-	for (size_t i = s.size(); i > 0; --i, ++p) {
-		if (*p > 0x1f) { // Check for control characters.
+	for (const char *start = p;
+			// The loop needs to run after the last byte, too.
+			p <= end;
+			++p) {
+		// Wait until control character (LF).
+		if (p < end && *p > 0x1f) {
 			continue;
 		}
 		int vlen = (p - start) - 3;
