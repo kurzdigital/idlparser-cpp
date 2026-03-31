@@ -67,6 +67,7 @@ static const char *idl_subtype(const char *s, const char *end,
 				// Return pointer after second "DL|ID".
 				return d + 2;
 			}
+			++d;
 		}
 	}
 	return s;
