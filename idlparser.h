@@ -120,25 +120,37 @@ IDL parse_idl(const std::string &s) {
 	}
 
 	// Split and collect key/value pairs.
+	bool skip_subtype = false;
 	for (const char *start = p;
 			// The loop needs to run after the last byte, too.
 			p <= end;
 			++p) {
-		// Wait until control character (LF).
+		// Wait until control character (LF or CR).
 		if (p < end && *p > 0x1f) {
 			continue;
 		}
-		int vlen = (p - start) - 3;
-		if (vlen > 0 && strchr("DZ", *start) &&
-				strchr(IDL_LETTERS, *(start + 1)) &&
-				strchr(IDL_LETTERS, *(start + 2))) {
-			std::string key(start, 3);
-			std::string value(start + 3, vlen);
+		// Per spec, CR (0x0d) is the subfile boundary marker. The segment
+		// immediately following a CR may begin with a 2-char subfile type
+		// identifier (e.g. "ZV", "ZI") prepended to the first field.
+		// Detect this by checking that the marker matches the key prefix
+		// (jurisdiction fields always share their 2-char subfile prefix).
+		const char *seg = start;
+		if (skip_subtype && (p - start) >= 4 &&
+				start[0] == start[2] && start[1] == start[3]) {
+			seg = start + 2;
+		}
+		int vlen = (p - seg) - 3;
+		if (vlen > 0 && strchr("DZ", *seg) &&
+				strchr(IDL_LETTERS, seg[1]) &&
+				strchr(IDL_LETTERS, seg[2])) {
+			std::string key(seg, 3);
+			std::string value(seg + 3, vlen);
 			if (key == "DBC") {
 				idl_resolve_sex(value);
 			}
 			idl_add(&idl, key, value);
 		}
+		skip_subtype = (p < end && *p == 0x0d);
 		start = p + 1;
 	}
 
